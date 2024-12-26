@@ -1,4 +1,4 @@
-/*
+/* My Name is Rahul Panchal 
 © [2024] Microchip Technology Inc. and its subsidiaries.
 
     Subject to your compliance with these terms, you may use Microchip 
@@ -39,7 +39,7 @@ const struct UART_INTERFACE *UartSerial = &UART1_Drv;
 #define ADC_RESOLUTION 4096
 uint16_t volatile adcResult;
 //uint16_t ac_input_voltage; // contain data of AN2  - RB7
-uint16_t ac_output_voltage; // contain data of AN10 - RB8
+//uint16_t ac_output_voltage; // contain data of AN10 - RB8
 uint16_t ac_input_current; // contain data of AN9  - RA2
 uint16_t ac_output_current; // contain data of AN3  - RA3
 //uint8_t  dc_battery_volt; // contain data of AN7  - RB2
@@ -218,7 +218,7 @@ enum ups_switch {
 
 
 
-/***********************************AC voltage mapping declaration***********************************/
+/***********************************AC input voltage mapping declaration***********************************/
 uint16_t volatile ac_input_voltage;
 int crosscount = 0;
 int climb_flag = 0;
@@ -276,13 +276,78 @@ void ac_input_volt_sense() {
 
 /***********************************AC voltage INPUT END mapping declaration***********************************/
 
+
+
+
+/***********************************AC output voltage mapping declaration***********************************/
+uint16_t ac_output_voltage; // contain data of AN10 - RB8
+//int ac_out_crosscount = 0;
+//int climb_flag = 0;
+int ac_out_val[100]; // Array to store sensor values
+int ac_out_max_v = 0;
+int ac_out_VmaxD = 0; // Max voltage
+int ac_out_VeffD = 0; // Effective voltage
+float ac_outputvolt = 0; // Resulting voltage
+
+void ac_output_volt_sense() {
+    /******************** Ac volt input START ***********************/
+    ac_output_voltage = adc->ConversionResultGet(Channel_AN10); // RB2 DC 12 volt sense
+    for (int i = 0; i < 100; i++) {
+
+        if (adc->ConversionResultGet(Channel_AN10) > 2040) {
+            ac_out_val[i] = ac_output_voltage; // Store sensor value in the array if it's greater than 511
+        } else {
+            ac_out_val[i] = 0; // Otherwise, set the value to 0
+        }
+        __delay_ms(1); // Short delay for stability
+    }
+
+    // Find the maximum sensor value in the array
+    ac_out_max_v = 0;
+    for (int i = 0; i < 100; i++) {
+        if (ac_out_val[i] > ac_out_max_v) {
+            ac_out_max_v = ac_out_val[i]; // Update max_v if a higher value is found
+        }
+        ac_out_val[i] = 0; // Reset the array element to 0
+    }
+
+    // Calculate effective voltage based on the maximum sensor value
+    if (ac_out_max_v != 0) {
+        ac_out_VmaxD = ac_out_max_v; // Set VmaxD to the maximum sensor value
+        ac_out_VeffD = ac_out_VmaxD / sqrt(2); // Calculate effective voltage (RMS) from VmaxD
+        //        Veff = (((VeffD - 2200.27) / -90.24) * -210.2) + 10 ;  // Apply calibration and scaling to Veff//42.76
+        //        Veff = ((VeffD - 2210)/3); // here accurate mapping
+        ac_outputvolt = ((ac_out_VeffD - 2587) / 2) + 225; // here accurate mapping
+        //Veff = ((VeffD - 600) / 2) + 230; // here accurate mapping
+        if (ac_outputvolt <= 100) {
+            ac_outputvolt = 0; // If no maximum value, set Veff to 0
+        }
+    } else {
+        ac_outputvolt = 0; // If no maximum value, set Veff to 0
+
+    }
+    //    printf("\n VeffD: %d\r\n", VeffD); // Input voltage contain in veff
+    printf("\n ac_outputvolt: %0.2f V\r\n", ac_outputvolt); // Input voltage contain in veff
+
+    //    __delay_ms(100);
+    ac_out_VmaxD = 0; // Reset VmaxD for the next iteration
+
+
+}
+
+/***********************************AC voltage output END mapping declaration***********************************/
+
+
+
+
 /************************************DC 12V sense*************************************************/
+uint16_t dc_battery_volt; // battery DC 12 volt sense  RB2-AN7
 #define VREF 3.3 // Reference voltage (adjust if needed)
 #define ADC_MAX_VALUE 1023.0 // Maximum value for 10-bit ADC
 float dc12v;
 
 void dc_12v_sense() {
-    uint16_t dc_battery_volt = adc->ConversionResultGet(Channel_AN7); // RB2 DC 12 volt sense
+    dc_battery_volt = adc->ConversionResultGet(Channel_AN9); // RA2 DC 12 current sense
     //        adcResult = ADC->GetConversion(Channel_AN0);
     //       printf("dcvol: %f\r\n",vo);
 
@@ -301,6 +366,22 @@ void dc_12v_sense() {
 }
 
 /************************************DC 12V sense*************************************************/
+
+/********************************************DC 12V Current sense start*************************************************/
+double dc12v__current_acs712_sensitivity = 0.18;
+double dc12v_Cout = 0;
+double dc12v_Current = 0;
+uint16_t dc12v_current_sense = 0;
+
+void dc_current_sense() {
+    dc12v_current_sense = adc->ConversionResultGet(Channel_AN7); // RB2 DC 12 volt sense
+    dc12v_Cout = ((3.3 / 4095) * dc12v_current_sense);
+    dc12v_Current = ((dc12v_Cout - 2.58) / dc12v__current_acs712_sensitivity);
+
+    printf("\n dc12v_Current: %0.2f V\r\n", dc12v_Current);
+}
+
+/********************************************DC 12V Current sense start*************************************************/
 
 /*****************************************sine wave generate ******************************************************/
 
@@ -337,6 +418,7 @@ int main(void) {
 
         longpress_switch();
         ac_input_volt_sense();
+        ac_output_volt_sense();
         dc_12v_sense();
         stdby_mode();
 
@@ -373,7 +455,7 @@ int main(void) {
                 break;
 
             case ups_off:
-                
+
                 PORTAbits.relay2 = 0; // AC bypass by this relay2
                 SCCP1_Timer_Stop();
                 PORTBbits.red_led = 1;
@@ -387,23 +469,3 @@ int main(void) {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
