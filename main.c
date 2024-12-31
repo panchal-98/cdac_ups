@@ -48,9 +48,9 @@ uint16_t acvolt_in;
 
 /***********************relay pins declararion Start****************************/
 
-#define relay1            RB10         // here by this pin battery charging relay on
+#define relay1            RB11         // here by this pin battery charging relay on
 #define relay2            RA0        // here by this pin ac bypass in ouput
-#define relay3            RB11        // here by this pin ac out using inverter circuit
+#define relay3            RB10        // here by this pin ac out using inverter circuit
 
 
 
@@ -61,13 +61,7 @@ uint16_t acvolt_in;
 #define green_led         RB9         // Here D2 led control
 #define red_led           RB3         // Here D3 led control
 
-/*****************************Switch long press ****************************************/
-#define mainswitch  RB4 // main switch  on off
-unsigned int press_count = 0; // for switch condition
-unsigned int long_press_threshold = 4; // Threshold for long press (~2 seconds at 1ms intervals) for switch condition
-uint16_t volatile ups_switch;
 
-/*****************************Switch long press ****************************************/
 
 ///*********************************PWM START*************************************/
 
@@ -78,8 +72,10 @@ volatile uint8_t gen2 = 0;
 #define SINE_TABLE_SIZE 200
 
 const uint16_t sineTable[SINE_TABLE_SIZE] = {
-    0, 0, 1, 1, 2, 2, 3, 4,
+    0, 0, 0, 1, 1, 1, 2, 2, 3, 4,
     5, 6, 7, 8, 10, 11, 12, 14,
+    //    0, 0, 1, 1, 2, 2, 3, 4,
+    //    5, 6, 7, 8, 10, 11, 12, 14,
     16, 17, 19, 21, 23, 25, 27, 29,
     32, 34, 36, 39, 41, 44, 46, 49,
     52, 55, 57, 60, 63, 66, 69, 72,
@@ -102,11 +98,11 @@ const uint16_t sineTable[SINE_TABLE_SIZE] = {
     41, 39, 36, 34, 32, 29, 27, 25,
     23, 21, 19, 17, 16, 14, 12, 11,
     10, 8, 7, 6, 5, 4, 3, 2,
-    2, 1, 1, 0, 0, 0, 0, 0,
+    2, 1, 1, 0, 0, 0,
 
 };
 const uint16_t sineTable1[200] = {
-    0, 0, 1, 2, 3, 4, 4, 5,
+    0, 0, 0, 1, 1, 2, 3, 4, 4, 5,
     5, 6, 7, 8, 10, 11, 12, 14,
     16, 17, 19, 21, 23, 25, 27, 29,
     32, 34, 36, 39, 41, 44, 46, 49,
@@ -130,8 +126,8 @@ const uint16_t sineTable1[200] = {
     41, 39, 36, 34, 32, 29, 27, 25,
     23, 21, 19, 17, 16, 14, 12, 11,
     10, 8, 7, 6, 5, 5, 4, 4,
-    3, 3, 2, 2, 1, 1, 0, 0,
-
+    //    3, 3, 2, 2, 1, 1, 0, 0,
+    2, 1, 1, 0, 0, 0,
 };
 
 void MyTimeoutHandler(void) {
@@ -155,8 +151,9 @@ void MyTimeoutHandler(void) {
             PWM_DutyCycleSet(PWM_GENERATOR_2, 0);
         } else PWM_DutyCycleSet(PWM_GENERATOR_2, sineTable[sineIndex2]);
 
-
     }
+    //    longpress_switch();
+    __delay_us(20);
 }
 /*********************************PWM STOP*************************************/
 
@@ -165,8 +162,8 @@ void gpio_pin_setup() {
     TRISBbits.TRISB4 = 1; // main mainswitch set as a input RB4
     TRISBbits.TRISB1 = 0; // here by this we can control buzzer RB1
     TRISAbits.TRISA0 = 0; // ac input power bypass relay2
-    TRISBbits.TRISB10 = 0; // charging on by  relay1 
-    TRISBbits.TRISB11 = 0; // dc to ac out  by  relay3 
+    TRISBbits.TRISB10 = 0; // dc to ac out  by  relay3 
+    TRISBbits.TRISB11 = 0; // charging on by  relay1 
     //    PORTBbits.buzzer = 0; // 
     //    PORTBbits.red_led = 0;
     //    PORTBbits.green_led = 0;
@@ -180,23 +177,41 @@ void stdby_mode() {
 }
 /****************************stand by mode *************************************/
 
-/****************************long press switch******************************************/
+
+
+
+/*****************************Switch long press ****************************************/
+#define mainswitch  RB4 // main switch  on off
+unsigned int press_count = 0; // for switch condition
+unsigned int long_press_threshold = 0; // Threshold for long press (~2 seconds at 1ms intervals) for switch condition
+uint16_t volatile ups_switch;
+
+uint8_t flag = 0;
+
 void longpress_switch() {
     /**************************************  UPS switching start ************************************************/
 
     if (PORTBbits.mainswitch == 0) { // Double-check if the switch is still pressed
 
+
         press_count++;
 
         PORTBbits.buzzer = 0; // beep buzzer off
-        __delay_ms(200);
+        __delay_ms(50);
         PORTBbits.buzzer = 1; // beep buzzer on
-        __delay_ms(20);
-        if (press_count > long_press_threshold) {
+        __delay_ms(100);
+
+        if (press_count >= long_press_threshold) {
+            flag = 1;
             ups_switch = !ups_switch; // Toggle ups_switch_on state
             press_count = 0; // Reset press count after toggling
-
+            if (flag == 1) {
+                TMR1_Stop();
+                flag = 0;
+                TMR1_Start();
+            }
         }
+
     } else {
 
         press_count = 0; // Reset press count 
@@ -207,6 +222,7 @@ void longpress_switch() {
     /**************************************  UPS switching END************************************************/
 
 }
+/*****************************Switch long press ****************************************/
 
 /*********************************switch case**************************************/
 enum ups_switch {
@@ -238,7 +254,7 @@ void ac_input_volt_sense() {
         } else {
             val[i] = 0; // Otherwise, set the value to 0
         }
-        __delay_ms(1); // Short delay for stability
+        //        __delay_ms(1); // Short delay for stability
     }
 
     // Find the maximum sensor value in the array
@@ -291,7 +307,7 @@ float ac_outputvolt = 0; // Resulting voltage
 
 void ac_output_volt_sense() {
     /******************** Ac volt input START ***********************/
-    ac_output_voltage = adc->ConversionResultGet(Channel_AN10); // RB2 DC 12 volt sense
+    ac_output_voltage = adc->ConversionResultGet(Channel_AN10); // RB8 DC 12 volt sense
     for (int i = 0; i < 100; i++) {
 
         if (adc->ConversionResultGet(Channel_AN10) > 2040) {
@@ -299,7 +315,7 @@ void ac_output_volt_sense() {
         } else {
             ac_out_val[i] = 0; // Otherwise, set the value to 0
         }
-        __delay_ms(1); // Short delay for stability
+        //        __delay_ms(1); // Short delay for stability
     }
 
     // Find the maximum sensor value in the array
@@ -317,7 +333,7 @@ void ac_output_volt_sense() {
         ac_out_VeffD = ac_out_VmaxD / sqrt(2); // Calculate effective voltage (RMS) from VmaxD
         //        Veff = (((VeffD - 2200.27) / -90.24) * -210.2) + 10 ;  // Apply calibration and scaling to Veff//42.76
         //        Veff = ((VeffD - 2210)/3); // here accurate mapping
-        ac_outputvolt = ((ac_out_VeffD - 2587) / 2) + 225; // here accurate mapping
+        ac_outputvolt = ((ac_out_VeffD - 2587) / 2) + 225; //here accurate mapping
         //Veff = ((VeffD - 600) / 2) + 230; // here accurate mapping
         if (ac_outputvolt <= 100) {
             ac_outputvolt = 0; // If no maximum value, set Veff to 0
@@ -334,6 +350,30 @@ void ac_output_volt_sense() {
 
 
 }
+
+
+/**********************************AC OUTPUT current sense start******************/
+
+#define ac_out_current_VREF 3.3               // ADC reference voltage
+#define ac_out_current_ADC_MAX 4095           // 12-bit ADC maximum value
+#define ac_out_current_OFFSET_VOLTAGE 2.5     // Midpoint voltage of the current sensor (e.g., ACS712)
+#define ac_out_current_SENSITIVITY 0.185      // Sensor sensitivity in V/A (e.g., ACS712-5A)
+uint16_t ac_out_cuurnt;
+float current;
+
+float Get_Current(uint16_t ac_out_current) {
+    float voltage = (ac_out_current * ac_out_current_VREF) / ac_out_current_ADC_MAX; // Convert ADC value to voltage
+    return (voltage - ac_out_current_OFFSET_VOLTAGE) / ac_out_current_SENSITIVITY; // Calculate current in Amperes
+}
+
+void acouput_current() {
+    uint16_t ac_out_current = adc->ConversionResultGet(Channel_AN3); // RA3 DC 12 volt sense
+    float current = Get_Current(ac_out_current); // Convert ADC value to current
+    //    printf("\n current: %0.2f A\r\n", ac_out_current); // Input voltage contain in veff
+    printf("\n current: %d \r\n", ac_out_current); // Input voltage contain in veff
+}
+
+/**********************************AC OUTPUT current sense END***************/
 
 /***********************************AC voltage output END mapping declaration***********************************/
 
@@ -388,16 +428,42 @@ void dc_current_sense() {
 void sinewave_generate() {
     SCCP1_Timer_TimeoutCallbackRegister(MyTimeoutHandler);
     // Set interrupt priority
+
     SCCP1_Timer_InterruptPrioritySet(1);
     // Start the timer
-    //    SCCP1_Timer_Start();
-    //    gen2 = 1;
+    SCCP1_Timer_Start();
+    gen2 = 1;
+    //    __delay_us(20);
+}
+
+void MYTIMER_10MS(void) {
+    longpress_switch();
+    //PORTBbits.RB9 = !PORTBbits.RB9;
+    //    gen1 = !gen1;
+    //    sineIndex = 0;
+    //    sineIndex2 = 0;
+    //    if (gen1) {
+    //        gen2 = 0;
+    //        //     sineIndex = (sineIndex + 1) % SINE_TABLE_SIZE;
+    //        //     __delay_us(10);
+    //    } else {
+    //        gen2 = 1;
+    //        //    sineIndex2 = (sineIndex2 + 1) % SINE_TABLE_SIZE;
+    //        //    __delay_us(10);
+    //
+    //    }
+
 }
 
 int main(void) {
     SYSTEM_Initialize();
+
+
+    TMR1_TimeoutCallbackRegister(MYTIMER_10MS);
+    //    TMR1_Start();
+    //    printf("\n 1202: %0.2f V\r\n");
     gpio_pin_setup();
-    sinewave_generate();
+    //    sinewave_generate();
     //    sinewave_generate();
     /*********************************PWM START*************************************/
     //        SCCP1_Timer_TimeoutCallbackRegister(MyTimeoutHandler);
@@ -410,15 +476,16 @@ int main(void) {
     ups_switch = PORTBbits.mainswitch; // GPIO RB4 read
 
 
-
+    TMR1_Start();
     // float voltage; // Variable to store calculated voltage
     //    uint16_t adcResult; // Variable to store raw ADC result
     while (1) {
         adc->SoftwareTriggerEnable();
 
-        longpress_switch();
+        //        longpress_switch();
         ac_input_volt_sense();
         ac_output_volt_sense();
+        acouput_current();
         dc_12v_sense();
         stdby_mode();
 
@@ -428,23 +495,28 @@ int main(void) {
             case ups_on:
 
                 //                PORTBbits.buzzer = 0;
-
+                //                longpress_switch();
                 if (ac_inputvolt > 0) {
                     SCCP1_Timer_Stop();
+                    PORTBbits.relay3 = 0; // Relay3 off RB10 pin control and by this pin dc to ac pass 
                     PORTBbits.buzzer = 0;
                     PORTBbits.green_led = 0; // green led on
                     PORTBbits.red_led = 0; // red led on
                     PORTAbits.relay2 = 1; // AC bypass by this relay2
                     if (dc12v < 10) {
-                        PORTBbits.relay1 = 1; // charging relay on
+                        PORTBbits.relay1 = 1; // RB11 charging relay on
                     } else if (dc12v > 14) {
-                        PORTBbits.relay1 = 0; // charging relay off
+                        PORTBbits.relay1 = 0; // RB11 charging relay off
                     }
 
                 } else {
 
-                    SCCP1_Timer_Start();
-                    gen2 = 1;
+                   
+                    PORTBbits.relay3 = 1; // Relay3 on RB10 pin control and by this pin dc to ac pass 
+                     sinewave_generate();
+                    //                    SCCP1_Timer_Start();
+                    //                    gen2 = 1;
+
                     PORTBbits.green_led = 1; // green led off
                     PORTBbits.red_led = 0; // red led off
                     PORTAbits.relay2 = 0; // AC bypass by this relay2
@@ -455,7 +527,8 @@ int main(void) {
                 break;
 
             case ups_off:
-
+                SCCP1_Timer_Stop();
+                PORTBbits.relay3 = 0; // Relay3 off RB10 pin control and by this pin dc to ac pass 
                 PORTAbits.relay2 = 0; // AC bypass by this relay2
                 SCCP1_Timer_Stop();
                 PORTBbits.red_led = 1;
